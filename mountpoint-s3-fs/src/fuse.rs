@@ -535,7 +535,7 @@ where
         fuse_unsupported!("ioctl", reply);
     }
 
-    #[instrument(level="warn", skip_all, fields(req=_req.unique(), ino=ino, fh=fh, offset=offset, length=length))]
+    #[instrument(level="debug", skip_all, fields(req=_req.unique(), ino=ino, fh=fh, offset=offset, length=length))]
     fn fallocate(
         &self,
         _req: &Request<'_>,
