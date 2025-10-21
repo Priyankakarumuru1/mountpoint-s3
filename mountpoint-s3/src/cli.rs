@@ -26,7 +26,7 @@ const AWS_CREDENTIALS_OPTIONS_HEADER: &str = "AWS credentials options";
 const LOGGING_OPTIONS_HEADER: &str = "Logging options";
 const CACHING_OPTIONS_HEADER: &str = "Caching options";
 const ADVANCED_OPTIONS_HEADER: &str = "Advanced options";
-
+const MOUNTPOINT_LOG_TARGET: &str = "mountpoint_s3";
 const FSTAB_DOCS: &str = "
 Alternative fstab style:
   mount-s3 <BUCKET> <DIRECTORY> -o <OPTIONS>
@@ -669,7 +669,11 @@ impl CliArgs {
             let mut filter = if self.debug {
                 String::from("debug")
             } else {
+<<<<<<< HEAD
                 String::from("warn")
+=======
+                String::from(&format!("warn,{MOUNTPOINT_LOG_TARGET}=info"))
+>>>>>>> c3d7a421 (Change default logging to WARN with INFO for mountpoint_s3 crates)
             };
             let crt_verbosity = if self.debug_crt { "debug" } else { "off" };
             filter.push_str(&format!(",{AWSCRT_LOG_TARGET}={crt_verbosity}"));
