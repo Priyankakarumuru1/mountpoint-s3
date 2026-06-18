@@ -125,7 +125,7 @@ pub fn assert_peak_reserved_invariant(scenario_name: &str, mem_limit: f64) {
     }
 
     // Print the total allocated and reserved bytes for debugging
-    if let Some(metric) = recorder.get("mem.allocated_bytes", &[]) {
+    if let Some(metric) = recorder.get("mem.allocated_bytes", &[("type", "total")]) {
         let peak = metric.gauge_history().max();
         tracing::info!(
             scenario = scenario_name,
@@ -133,7 +133,7 @@ pub fn assert_peak_reserved_invariant(scenario_name: &str, mem_limit: f64) {
             "stress: peak mem.allocated_bytes (heap allocated by pool)"
         );
     }
-    if let Some(metric) = recorder.get("mem.reserved_bytes", &[]) {
+    if let Some(metric) = recorder.get("mem.reserved_bytes", &[("type", "total")]) {
         let peak = metric.gauge_history().max();
         tracing::info!(
             scenario = scenario_name,
