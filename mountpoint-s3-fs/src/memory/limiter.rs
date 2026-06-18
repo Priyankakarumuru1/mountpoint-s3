@@ -123,6 +123,7 @@ impl MemoryLimiter {
     fn reserve(&self, area: BufferArea, size: usize) {
         self.mem_reserved.fetch_add(size, Ordering::SeqCst);
         metrics::gauge!("mem.bytes_reserved", "area" => area.as_str()).increment(size as f64);
+        metrics::gauge!("mem.reserved_bytes", "type" => "total").increment(size as f64);
     }
 
     /// Reserve the memory for future uses. If there is not enough memory returns `false`.
@@ -150,6 +151,7 @@ impl MemoryLimiter {
             ) {
                 Ok(_) => {
                     metrics::gauge!("mem.bytes_reserved", "area" => area.as_str()).increment(size as f64);
+                    metrics::gauge!("mem.reserved_bytes", "type" => "total").increment(size as f64);
                     metrics::histogram!("mem.reserve_latency_us", "area" => area.as_str())
                         .record(start.elapsed().as_micros() as f64);
                     return true;
@@ -165,6 +167,7 @@ impl MemoryLimiter {
             let remaining = cursor_reserved.swap(0, Ordering::SeqCst);
             self.mem_reserved.fetch_sub(remaining, Ordering::SeqCst);
             metrics::gauge!("mem.bytes_reserved", "area" => BufferArea::Prefetch.as_str()).decrement(remaining as f64);
+            metrics::gauge!("mem.reserved_bytes", "type" => "total").decrement(remaining as f64);
         }
         self.trigger_process_pending();
     }
@@ -244,6 +247,7 @@ impl MemoryLimiter {
         };
         self.mem_reserved.fetch_sub(decremented, Ordering::SeqCst);
         metrics::gauge!("mem.bytes_reserved", "area" => BufferArea::Prefetch.as_str()).decrement(decremented as f64);
+        metrics::gauge!("mem.reserved_bytes", "type" => "total").decrement(decremented as f64);
     }
 
     pub fn try_allocate(
@@ -254,14 +258,12 @@ impl MemoryLimiter {
     ) -> Option<ManagedBuffer> {
         if forced {
             self.allocated_bytes.fetch_add(size, Ordering::SeqCst);
+            metrics::gauge!("mem.allocated_bytes", "type" => "total").increment(size as f64);
         } else {
             let start = Instant::now();
             let mut mem_allocated = self.allocated_bytes.load(Ordering::SeqCst);
             loop {
                 let new_mem_allocated = mem_allocated.saturating_add(size);
-                let mem_reserved = self.mem_reserved.load(Ordering::SeqCst);
-                metrics::gauge!("mem.allocated_bytes", "type" => "total").set(mem_allocated as f64);
-                metrics::gauge!("mem.reserved_bytes", "type" => "total").set(mem_reserved as f64);
                 let new_total_mem_usage = new_mem_allocated.saturating_add(self.additional_mem_reserved);
                 if new_total_mem_usage > self.mem_limit {
                     trace!(new_total_mem_usage, "not enough memory to allocate");
@@ -276,6 +278,7 @@ impl MemoryLimiter {
                     Ordering::SeqCst,
                 ) {
                     Ok(_) => {
+                        metrics::gauge!("mem.allocated_bytes", "type" => "total").increment(size as f64);
                         metrics::histogram!("mem.allocate_latency_us").record(start.elapsed().as_micros() as f64);
                         break;
                     }
@@ -295,6 +298,7 @@ impl MemoryLimiter {
         let size = ptr.size();
         drop(ptr);
         self.allocated_bytes.fetch_sub(size, Ordering::SeqCst);
+        metrics::gauge!("mem.allocated_bytes", "type" => "total").decrement(size as f64);
         if let Some(kind) = kind {
             self.release_bytes(size, kind);
         } else {
