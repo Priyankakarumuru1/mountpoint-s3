@@ -244,6 +244,13 @@ impl AllocationQueue {
         self.has_pending.load(Ordering::SeqCst)
     }
 
+    /// Returns the number of pending allocations in each priority queue (high, low).
+    /// Includes cancelled entries (those are pruned lazily on the next pop).
+    pub fn depth(&self) -> (usize, usize) {
+        let inner = self.inner.lock().unwrap();
+        (inner.high.len(), inner.low.len())
+    }
+
     /// `Instant` at which the next-to-be-served live entry was queued.
     ///
     /// Walks high then low (matching [`Self::pop_front_if`]'s priority order)

@@ -283,10 +283,19 @@ impl PagedPoolInner {
     /// - cursor without an active read (speculative prefetch) → low priority
     /// - no cursor (upload) → high priority (write syscall is blocked)
     async fn get_buffer_async(&self, size: usize, kind: BufferKind, cursor_id: Option<CursorId>) -> PoolBuffer {
+        // Track allocation request
+        metrics::counter!("mem.allocations_requested", "kind" => kind.as_str()).increment(1);
+
+        // Report current queue depth
+        let (high, low) = self.allocation_queue.depth();
+        metrics::gauge!("mem.queue_depth", "priority" => "high").set(high as f64);
+        metrics::gauge!("mem.queue_depth", "priority" => "low").set(low as f64);
+
         // Fast path: if the queue is empty, try to acquire immediately.
         if !self.allocation_queue.has_pending()
             && let Some(buffer) = self.try_get_buffer(size, kind, cursor_id, false)
         {
+            metrics::counter!("mem.allocations_granted_immediate", "kind" => kind.as_str()).increment(1);
             return buffer;
         }
 
@@ -295,9 +304,18 @@ impl PagedPoolInner {
         // Uploads (no cursor) are always High — a write syscall is blocked.
         // NOTE: We check if the cursor has an active read, not if this allocation serves it.
         let rx = match cursor_id {
-            Some(id) if self.limiter.has_active_read(id) => self.allocation_queue.push_high(cursor_id, size, kind),
-            Some(id) => self.allocation_queue.push_low(id, size, kind),
-            None => self.allocation_queue.push_high(None, size, kind), // uploads are urgent
+            Some(id) if self.limiter.has_active_read(id) => {
+                metrics::counter!("mem.allocations_queued", "kind" => kind.as_str(), "priority" => "high").increment(1);
+                self.allocation_queue.push_high(cursor_id, size, kind)
+            }
+            Some(id) => {
+                metrics::counter!("mem.allocations_queued", "kind" => kind.as_str(), "priority" => "low").increment(1);
+                self.allocation_queue.push_low(id, size, kind)
+            }
+            None => {
+                metrics::counter!("mem.allocations_queued", "kind" => kind.as_str(), "priority" => "high").increment(1);
+                self.allocation_queue.push_high(None, size, kind) // uploads are urgent
+            }
         };
         // After pushing, try to wake immediately in case memory freed between the fast-path
         // check above and the push (avoids the race where a buffer drop called trigger_process_pending
