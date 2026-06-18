@@ -123,6 +123,24 @@ pub fn assert_peak_reserved_invariant(scenario_name: &str, mem_limit: f64) {
             format_mib(effective_budget),
         );
     }
+
+    // Print the total allocated and reserved bytes for debugging
+    if let Some(metric) = recorder.get("mem.allocated_bytes", &[]) {
+        let peak = metric.gauge_history().max();
+        tracing::info!(
+            scenario = scenario_name,
+            peak = %format_mib(peak),
+            "stress: peak mem.allocated_bytes (heap allocated by pool)"
+        );
+    }
+    if let Some(metric) = recorder.get("mem.reserved_bytes", &[]) {
+        let peak = metric.gauge_history().max();
+        tracing::info!(
+            scenario = scenario_name,
+            peak = %format_mib(peak),
+            "stress: peak mem.reserved_bytes (prefetch reservation intent)"
+        );
+    }
 }
 
 /// Push a `{metric}{{{label_key}={label_value}}} peak ... exceeds effective budget ...`
