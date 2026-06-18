@@ -259,6 +259,9 @@ impl MemoryLimiter {
             let mut mem_allocated = self.allocated_bytes.load(Ordering::SeqCst);
             loop {
                 let new_mem_allocated = mem_allocated.saturating_add(size);
+                let mem_reserved = self.mem_reserved.load(Ordering::SeqCst);
+                metrics::gauge!("mem.allocated_bytes").set(mem_allocated as f64);
+                metrics::gauge!("mem.reserved_bytes").set(mem_reserved as f64);
                 let new_total_mem_usage = new_mem_allocated.saturating_add(self.additional_mem_reserved);
                 if new_total_mem_usage > self.mem_limit {
                     trace!(new_total_mem_usage, "not enough memory to allocate");
