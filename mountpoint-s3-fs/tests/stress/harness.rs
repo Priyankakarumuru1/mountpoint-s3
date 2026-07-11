@@ -174,11 +174,17 @@ pub fn run(scenario: Scenario) {
         aggregate.merge(&rec);
     }
 
+    eprintln!("[DEBUG] harness - about to drop setup_guard");
     drop(setup_guard);
+    eprintln!("[DEBUG] harness - setup_guard dropped");
+
+    eprintln!("[DEBUG] harness - about to drop session");
     drop(session);
+    eprintln!("[DEBUG] harness - session dropped successfully");
 
     let stalled = stalled_worker.load(Ordering::SeqCst);
     if stalled != NO_STALL {
+        eprintln!("[DEBUG] harness - worker stalled, about to panic");
         panic!(
             "stress: scenario {scenario_name:?} failed: worker {} stalled for at least {:?}",
             labels[stalled], max_idles[stalled],

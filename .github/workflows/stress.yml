@@ -9,7 +9,7 @@ on:
         required: true
         type: string
   push:
-    branches: [main, feature/memory-limit, "wf-changes/**"]
+    branches: [main, feature/memory-limit, "wf-changes/**", "prikaru/debug-*"]
   workflow_dispatch:
 
 permissions:

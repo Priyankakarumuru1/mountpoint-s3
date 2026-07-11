@@ -177,16 +177,22 @@ impl TestSession {
 
 impl Drop for TestSession {
     fn drop(&mut self) {
+        eprintln!("[DEBUG] TestSession::drop - ENTERED");
         // If the session created with a pre-existing mount (e.g., with `pass_fuse_fd`),
         // this will unmount it explicitly...
         drop(self.mount.take());
+        eprintln!("[DEBUG] TestSession::drop - mount dropped");
         // ...if not, the fuse session will unmount on shutdown.
         if let Some(session) = self.session.take() {
+            eprintln!("[DEBUG] TestSession::drop - calling shutdown_fn");
             session.shutdown_fn()();
+            eprintln!("[DEBUG] TestSession::drop - about to call session.join() - THIS MAY HANG");
             if let Err(error) = session.join() {
                 tracing::warn!(?error, "error while unmounting");
             }
+            eprintln!("[DEBUG] TestSession::drop - session.join() completed successfully");
         }
+        eprintln!("[DEBUG] TestSession::drop - EXITING");
     }
 }
 
