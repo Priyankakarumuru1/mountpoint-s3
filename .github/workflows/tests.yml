@@ -393,6 +393,7 @@ jobs:
       options: >-
         --memory=2g
         --memory-swap=2g
+        --privileged
 
     steps:
     - name: Install prerequisites for container
@@ -428,31 +429,46 @@ jobs:
         cat /sys/fs/cgroup/memory.max 2>/dev/null || echo "not found"
         echo "=== cgroup v1 ==="
         cat /sys/fs/cgroup/memory/memory.limit_in_bytes 2>/dev/null || echo "not found"
+        echo "=== Process cgroup location ==="
+        cat /proc/self/cgroup
+        echo "=== Check if we can write to cgroups ==="
+        mkdir -p /sys/fs/cgroup/test-write 2>&1 || echo "Cannot create cgroups"
     - name: Run cgroup-aware memory detection test
       env:
         TEST_CGROUP_MEM_LIMIT_MB: "2048"
       run: cargo test -p mountpoint-s3-fs --lib mem_limiter::tests::test_effective_total_memory_respects_cgroup
-    - name: Test nested cgroup limit detection (inherited limits)
+    - name: Test nested cgroup limit detection (inherited limits - Zoox case)
       run: |
         set -e
-        # Create parent cgroup with 2GB limit
-        mkdir -p /sys/fs/cgroup/mp-test-parent
-        echo '+memory' > /sys/fs/cgroup/mp-test-parent/cgroup.subtree_control
-        echo $((2 * 1024 * 1024 * 1024)) > /sys/fs/cgroup/mp-test-parent/memory.max
 
-        # Create child cgroup that inherits the limit
-        mkdir -p /sys/fs/cgroup/mp-test-parent/mp-test-child
-        echo 'max' > /sys/fs/cgroup/mp-test-parent/mp-test-child/memory.max
+        # Zoox's scenario: MemoryMax set on parent slice, child inherits it
+        # Based on Andrew's repro script
+        readonly LIMIT_BYTES=$((2 * 1024 * 1024 * 1024))  # 2GB to match container limit
+        readonly SLICE=/sys/fs/cgroup/mp-test.slice
+        readonly LEAF="$SLICE/mp-test.scope"
 
-        # Run test in child cgroup
+        # Create nested cgroups
+        mkdir -p "$SLICE"
+        echo '+memory' > "$SLICE/cgroup.subtree_control"
+        mkdir -p "$LEAF"
+
+        # Case 2: Limit on parent (inherited), child reads "max"
+        echo "$LIMIT_BYTES" > "$SLICE/memory.max"
+        echo max > "$LEAF/memory.max"
+
+        echo "Parent slice memory.max: $(cat "$SLICE/memory.max")"
+        echo "Child scope memory.max: $(cat "$LEAF/memory.max") (inherited from parent)"
+
+        # Run test from inside the child cgroup
         bash -c "
-          echo \$\$ > /sys/fs/cgroup/mp-test-parent/mp-test-child/cgroup.procs
+          echo \$\$ > '$LEAF/cgroup.procs'
+          echo 'Process cgroup: '
+          cat /proc/self/cgroup
           TEST_CGROUP_MEM_LIMIT_MB=2048 cargo test -p mountpoint-s3-fs --lib mem_limiter::tests::test_effective_total_memory_respects_cgroup
         "
 
         # Cleanup
-        rmdir /sys/fs/cgroup/mp-test-parent/mp-test-child || true
-        rmdir /sys/fs/cgroup/mp-test-parent || true
+        rmdir "$LEAF" "$SLICE" 2>/dev/null || true
 
   workflow-complete:
     name: "Tests Workflow Complete"
